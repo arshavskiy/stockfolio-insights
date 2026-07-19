@@ -85,3 +85,11 @@ Added to the daily calendar pipeline (~5 Finnhub calls per ticker, rate-paced):
 `/enrich/:ticker` summary now includes: `beatRate` ({beats, of}), `analystDelta` (bullish count change MoM), `daysToCover`, `shortInterestChangePct` — plus full `surpriseHistory`, `analystTrends`, `shortInterest` blocks.
 
 Badge example this enables: **"Earnings in 6d · AMC · beat 7/8 · +3 analyst upgrades · 4.2 days to cover"**
+
+## Macro & Price Layer (v0.4)
+
+- **Macro calendar** — `MacroEvent` seeded from `data/macro-2026.json`: official 2026 FOMC statement days (verified vs federalreserve.gov, SEP meetings flagged), CPI, PPI, jobs report, GDP, and PCE dates from the OMB federal indicators schedule. `GET /events/macro?days=14`. Update the JSON yearly.
+- **Price/volume anomalies** — daily OHLCV from **Stooq** (free, keyless, `.us` suffix). Computes 30d volume baseline, `volumeRatio`, and flags `unusualVolume` (>= 2x). Closes the loop: sentiment spike + volume confirmation.
+- `/enrich/:ticker` summary adds: `volumeRatio`, `unusualVolume`, `lastChangePct`, `nextMacro` — plus a 30d `priceSeries` block for charts.
+
+**Deliberately deferred: 13F institutional holdings.** 13Fs are filed *by* institutions listing their positions — building "who holds ticker X" requires ingesting and inverting every institution's filing (thousands per quarter, 45 days stale). The `OwnershipSnapshot.topHolders` schema is ready; when needed, either a paid provider (FMP) or a dedicated EDGAR 13F batch job fills it. Not worth the complexity at current stage.

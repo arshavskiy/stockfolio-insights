@@ -7,6 +7,8 @@ import { fetchSecFilings } from '../services/secFilings'
 import { refreshOwnership } from '../services/ownership'
 import { fetchEarningsSurprises, fetchAnalystTrends, fetchDividends } from '../services/fundamentals'
 import { fetchShortInterest } from '../services/shortInterestSvc'
+import { seedMacroCalendar } from '../services/macro'
+import { fetchDailyCandles } from '../services/prices'
 
 const watchlist = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA')
   .split(',')
@@ -15,6 +17,12 @@ const watchlist = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA')
 
 export async function runCalendarPipeline() {
   console.log('[calendar] start')
+  try {
+    const macro = await seedMacroCalendar()
+    if (macro) console.log(`[calendar] macro events seeded: ${macro}`)
+  } catch (e: any) {
+    console.error('[calendar] macro seed failed:', e.message)
+  }
   try {
     const earnings = await fetchEarningsCalendar()
     console.log(`[calendar] earnings upserted: ${earnings}`)
@@ -29,6 +37,7 @@ export async function runCalendarPipeline() {
       await fetchAnalystTrends(t)
       await fetchDividends(t)
       await fetchShortInterest(t)
+      await fetchDailyCandles(t)
       console.log(`[calendar] ${t}: ${filings} filings + fundamentals refreshed`)
       await new Promise((r) => setTimeout(r, 2200)) // ~5 Finnhub calls per ticker; stay under 60/min
     } catch (e: any) {

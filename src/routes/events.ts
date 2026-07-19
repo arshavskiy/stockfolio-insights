@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { CorporateEvent } from '../models/CorporateEvent'
 import { OwnershipSnapshot } from '../models/OwnershipSnapshot'
+import { MacroEvent } from '../models/MacroEvent'
 
 export const events = Router()
 

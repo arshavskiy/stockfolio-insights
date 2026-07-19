@@ -7,6 +7,8 @@ import { CorporateEvent } from '../models/CorporateEvent'
 import { OwnershipSnapshot } from '../models/OwnershipSnapshot'
 import { AnalystTrend } from '../models/AnalystTrend'
 import { ShortInterest } from '../models/ShortInterest'
+import { MacroEvent } from '../models/MacroEvent'
+import { PriceStat } from '../models/PriceStat'
 
 export const enrich = Router()
 
@@ -24,7 +26,7 @@ enrich.get('/:ticker', async (req, res) => {
 
   const since7d = new Date(Date.now() - 7 * 86_400_000)
 
-  const [series, articles, nextEvent, recentEvents, ownership, surprises, recTrends, shortInt] = await Promise.all([
+  const [series, articles, nextEvent, recentEvents, ownership, surprises, recTrends, shortInt, nextMacro, priceStats] = await Promise.all([
     TickerInsight.find({ ticker }).sort({ date: 1 }).limit(14).lean(),
     Article.find({ tickers: ticker, analyzed: true, publishedAt: { $gte: since7d } })
       .sort({ publishedAt: -1 })
@@ -38,7 +40,11 @@ enrich.get('/:ticker', async (req, res) => {
       .sort({ date: -1 }).limit(8).select('date period epsActual epsEstimate surprisePct').lean(),
     AnalystTrend.find({ ticker }).sort({ period: -1 }).limit(3).lean(),
     ShortInterest.findOne({ ticker }).sort({ settlementDate: -1 }).lean(),
+    MacroEvent.findOne({ date: { $gte: new Date() }, impact: 'high' }).sort({ date: 1 }).lean(),
+    PriceStat.find({ ticker }).sort({ date: -1 }).limit(30).lean(),
   ])
+
+  const latestPrice = priceStats[0] ?? null
 
   // beat rate over last up-to-8 reported quarters
   const beats = surprises.filter((s) => (s.surprisePct ?? 0) > 0).length
@@ -64,7 +70,16 @@ enrich.get('/:ticker', async (req, res) => {
       analystDelta,                                    // change in buy+strongBuy vs prior month
       daysToCover: shortInt?.daysToCover ?? null,
       shortInterestChangePct: shortInt?.changePct ?? null,
+      volumeRatio: latestPrice?.volumeRatio ?? null,
+      unusualVolume: latestPrice?.unusualVolume ?? false,
+      lastChangePct: latestPrice?.changePct ?? null,
+      nextMacro: nextMacro
+        ? { label: nextMacro.label, date: nextMacro.date, note: nextMacro.note ?? null }
+        : null,
     },
+    priceSeries: priceStats.slice().reverse().map((p) => ({
+      date: p.date, close: p.close, volume: p.volume, volumeRatio: p.volumeRatio,
+    })),
     surpriseHistory: surprises,
     analystTrends: recTrends,
     shortInterest: shortInt,
