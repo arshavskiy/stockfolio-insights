@@ -3,6 +3,30 @@
 import { CorporateEvent } from '../models/CorporateEvent'
 
 const UA = process.env.SEC_USER_AGENT || 'StockfolioInsights research contact@example.com'
+
+// SEC 8-K item codes -> human-readable classification. No LLM needed:
+// EDGAR's submissions JSON already lists the item codes per filing.
+const ITEM_LABELS: Record<string, string> = {
+  '1.01': 'material-agreement',
+  '1.02': 'agreement-termination',
+  '1.03': 'bankruptcy',
+  '2.01': 'acquisition-or-disposal',
+  '2.02': 'results-of-operations',
+  '2.03': 'new-financial-obligation',
+  '2.05': 'exit-or-disposal-costs',
+  '2.06': 'material-impairment',
+  '3.01': 'delisting-notice',
+  '4.01': 'auditor-change',
+  '4.02': 'financials-non-reliance',   // restatement — high impact
+  '5.01': 'change-in-control',
+  '5.02': 'executive-change',           // CEO/CFO/director departure or appointment
+  '5.03': 'charter-bylaw-amendment',
+  '5.07': 'shareholder-vote',
+  '7.01': 'reg-fd-disclosure',
+  '8.01': 'other-events',
+  '9.01': 'exhibits',
+}
+
 const TRACKED_FORMS = new Set(['10-K', '10-Q', '8-K', '20-F', '6-K'])
 
 // ticker -> CIK map (SEC publishes the full mapping)
@@ -44,11 +68,19 @@ export async function fetchSecFilings(ticker: string): Promise<number> {
     const filingDate = new Date(recent.filingDate[i])
     const accessionPath = accession.replace(/-/g, '')
 
+    // 8-K filings list their item codes in the submissions payload
+    const rawItems: string = form === '8-K' ? recent.items?.[i] || '' : ''
+    const itemCodes = rawItems.split(',').map((x: string) => x.trim()).filter(Boolean)
+
     await CorporateEvent.updateOne(
       { ticker: ticker.toUpperCase(), type: form, date: filingDate },
       {
         $set: {
           accessionNo: accession,
+          ...(itemCodes.length && {
+            items: itemCodes,
+            itemLabels: itemCodes.map((c: string) => ITEM_LABELS[c] || c),
+          }),
           filingUrl: `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accessionPath}/${recent.primaryDocument[i]}`,
           period: recent.reportDate?.[i] || undefined,
           source: 'sec-edgar',

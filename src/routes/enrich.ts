@@ -5,6 +5,8 @@ import { Article } from '../models/Article'
 import { TickerInsight } from '../models/TickerInsight'
 import { CorporateEvent } from '../models/CorporateEvent'
 import { OwnershipSnapshot } from '../models/OwnershipSnapshot'
+import { AnalystTrend } from '../models/AnalystTrend'
+import { ShortInterest } from '../models/ShortInterest'
 
 export const enrich = Router()
 
@@ -22,7 +24,7 @@ enrich.get('/:ticker', async (req, res) => {
 
   const since7d = new Date(Date.now() - 7 * 86_400_000)
 
-  const [series, articles, nextEvent, recentEvents, ownership] = await Promise.all([
+  const [series, articles, nextEvent, recentEvents, ownership, surprises, recTrends, shortInt] = await Promise.all([
     TickerInsight.find({ ticker }).sort({ date: 1 }).limit(14).lean(),
     Article.find({ tickers: ticker, analyzed: true, publishedAt: { $gte: since7d } })
       .sort({ publishedAt: -1 })
@@ -32,7 +34,17 @@ enrich.get('/:ticker', async (req, res) => {
     CorporateEvent.findOne({ ticker, date: { $gte: new Date() } }).sort({ date: 1 }).lean(),
     CorporateEvent.find({ ticker, date: { $lt: new Date() } }).sort({ date: -1 }).limit(3).lean(),
     OwnershipSnapshot.findOne({ ticker }).sort({ asOf: -1 }).lean(),
+    CorporateEvent.find({ ticker, type: 'earnings', epsActual: { $ne: null }, surprisePct: { $exists: true } })
+      .sort({ date: -1 }).limit(8).select('date period epsActual epsEstimate surprisePct').lean(),
+    AnalystTrend.find({ ticker }).sort({ period: -1 }).limit(3).lean(),
+    ShortInterest.findOne({ ticker }).sort({ settlementDate: -1 }).lean(),
   ])
+
+  // beat rate over last up-to-8 reported quarters
+  const beats = surprises.filter((s) => (s.surprisePct ?? 0) > 0).length
+  // analyst delta: bullish count now vs previous month
+  const bullish = (t: any) => (t?.strongBuy || 0) + (t?.buy || 0)
+  const analystDelta = recTrends.length >= 2 ? bullish(recTrends[0]) - bullish(recTrends[1]) : null
 
   const latest = series.at(-1)
   const body = {
@@ -48,7 +60,14 @@ enrich.get('/:ticker', async (req, res) => {
         ? Math.ceil((new Date(nextEvent.date).getTime() - Date.now()) / 86_400_000)
         : null,
       insiderNet3m: ownership?.insiderNet3m ?? null,
+      beatRate: surprises.length ? { beats, of: surprises.length } : null,
+      analystDelta,                                    // change in buy+strongBuy vs prior month
+      daysToCover: shortInt?.daysToCover ?? null,
+      shortInterestChangePct: shortInt?.changePct ?? null,
     },
+    surpriseHistory: surprises,
+    analystTrends: recTrends,
+    shortInterest: shortInt,
     sentimentSeries: series.map((r) => ({
       date: r.date,
       sentiment: r.avgSentiment,

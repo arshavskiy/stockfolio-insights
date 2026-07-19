@@ -5,6 +5,8 @@ import { connectDB } from '../db'
 import { fetchEarningsCalendar } from '../services/earnings'
 import { fetchSecFilings } from '../services/secFilings'
 import { refreshOwnership } from '../services/ownership'
+import { fetchEarningsSurprises, fetchAnalystTrends, fetchDividends } from '../services/fundamentals'
+import { fetchShortInterest } from '../services/shortInterestSvc'
 
 const watchlist = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA')
   .split(',')
@@ -23,8 +25,12 @@ export async function runCalendarPipeline() {
     try {
       const filings = await fetchSecFilings(t)
       await refreshOwnership(t)
-      console.log(`[calendar] ${t}: ${filings} filings`)
-      await new Promise((r) => setTimeout(r, 1100)) // SEC asks max 10 req/s; Finnhub 60/min
+      await fetchEarningsSurprises(t)
+      await fetchAnalystTrends(t)
+      await fetchDividends(t)
+      await fetchShortInterest(t)
+      console.log(`[calendar] ${t}: ${filings} filings + fundamentals refreshed`)
+      await new Promise((r) => setTimeout(r, 2200)) // ~5 Finnhub calls per ticker; stay under 60/min
     } catch (e: any) {
       console.error(`[calendar] ${t} failed:`, e.message)
     }

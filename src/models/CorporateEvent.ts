@@ -18,8 +18,16 @@ const CorporateEventSchema = new Schema(
     revenueEstimate: { type: Number },
     revenueActual: { type: Number },
     hour: { type: String },                              // 'bmo' (before open) | 'amc' (after close)
+    surprisePct: { type: Number },                       // (actual-estimate)/|estimate| for earnings
+    // dividend-specific (date = ex-dividend date)
+    amount: { type: Number },
+    currency: { type: String },
+    payDate: { type: Date },
+    recordDate: { type: Date },
     // filing-specific
     accessionNo: { type: String },
+    items: { type: [String], default: undefined },       // 8-K item codes e.g. ['5.02','9.01']
+    itemLabels: { type: [String], default: undefined },  // human-readable classification
     filingUrl: { type: String },
     source: { type: String, required: true },            // 'finnhub' | 'sec-edgar' | 'maya'
   },

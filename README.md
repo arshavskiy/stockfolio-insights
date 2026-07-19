@@ -69,3 +69,19 @@ TASE tickers won't resolve in EDGAR — Maya report dates land in the same `Corp
 ```
 
 Integration pattern: the Stockfolio backend proxies this route (`/api/enrich/:ticker` → insights service), keeping auth and CORS in one place. All fields degrade to `null`/`[]` when data isn't available yet — the Vue component renders what exists.
+
+## Fundamentals Layer (v0.3)
+
+Added to the daily calendar pipeline (~5 Finnhub calls per ticker, rate-paced):
+
+| Data | Source | Where it lands |
+|---|---|---|
+| Earnings surprise history (beat/miss %) | Finnhub free | `CorporateEvent.surprisePct` |
+| Analyst rec trends (monthly buy/hold/sell) | Finnhub free | `AnalystTrend` |
+| Dividend events (ex-date, pay date, amount) | Finnhub (403-safe skip if premium-gated) | `CorporateEvent` type `dividend` |
+| Short interest + days-to-cover | FINRA Query API (free registration) | `ShortInterest` |
+| 8-K item classification (executive-change, restatement, M&A...) | EDGAR submissions `items` field — no LLM needed | `CorporateEvent.itemLabels` |
+
+`/enrich/:ticker` summary now includes: `beatRate` ({beats, of}), `analystDelta` (bullish count change MoM), `daysToCover`, `shortInterestChangePct` — plus full `surpriseHistory`, `analystTrends`, `shortInterest` blocks.
+
+Badge example this enables: **"Earnings in 6d · AMC · beat 7/8 · +3 analyst upgrades · 4.2 days to cover"**
