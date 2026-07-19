@@ -11,6 +11,7 @@ import { fetchShortInterest } from '../services/shortInterestSvc'
 import { seedMacroCalendar } from '../services/macro'
 import { fetchDailyCandles } from '../services/prices'
 import { refreshProfile } from '../services/yahoo'
+import { computeTypology } from '../services/typology'
 
 
 export async function runCalendarPipeline() {
@@ -39,6 +40,7 @@ export async function runCalendarPipeline() {
       await fetchShortInterest(t)
       await fetchDailyCandles(t)
       await refreshProfile(t)
+      await computeTypology(t)
       console.log(`[calendar] ${t}: ${filings} filings + fundamentals refreshed`)
       await new Promise((r) => setTimeout(r, 2200)) // ~5 Finnhub calls per ticker; stay under 60/min
     } catch (e: any) {

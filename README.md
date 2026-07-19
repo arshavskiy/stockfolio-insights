@@ -116,3 +116,25 @@ All three workers (`ingest`, `calendar`, `quotes`) iterate `getActiveTickers()`.
 UI ──> /quotes (our DB, ~ms)            ──> render
    └─> Yahoo, only for missing/stale    ──> render + self-heals next cycle
 ```
+
+## Ticker Typology Map (v0.6)
+
+Daily-computed archetype per ticker (`TickerTypology`) — **zero external API calls**, pure derivation over collected data. Dimensions + heuristic thresholds:
+
+| Dimension | Values | From |
+|---|---|---|
+| marketCapClass | mega ≥$200B / large ≥$10B / mid ≥$2B / small / micro | Finnhub profile |
+| style | growth (P/E≥35) / value (P/E≤15) / blend / speculative (no earnings) | P/E + EPS |
+| volatilityClass | low (β<0.8) / medium / high (β>1.3) | beta |
+| dividendProfile | none / payer / high-yield (≥4%) | dividend yield |
+| newsProfile | quiet (0) / covered / hot (≥15 articles/7d) | our news pipeline |
+| insiderSignal | buying / selling / neutral | insider net 3m |
+| squeezeRisk | low / elevated (DTC≥4) / high (DTC≥8) | FINRA short interest |
+
+Each doc stores the raw `inputs` snapshot, so the UI can always show *why* a label was assigned. Flat `tags` array (`mega-cap`, `growth`, `high-beta`, `insider-buying`, `squeeze-watch`, `hot-coverage`...) for chips and filters.
+
+**Endpoints:**
+- `GET /typology/:ticker` — full archetype + inputs
+- `GET /typology/map?group=primaryIndustry|style|marketCapClass|volatilityClass` — grouped for treemap/heatmap views
+- `GET /typology/tags/insider-buying` — filter by tag (chip navigation)
+- `/enrich/:ticker` now includes a compact `typology` block

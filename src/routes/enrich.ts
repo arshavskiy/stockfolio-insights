@@ -9,6 +9,7 @@ import { AnalystTrend } from '../models/AnalystTrend'
 import { ShortInterest } from '../models/ShortInterest'
 import { MacroEvent } from '../models/MacroEvent'
 import { PriceStat } from '../models/PriceStat'
+import { TickerTypology } from '../models/TickerTypology'
 
 export const enrich = Router()
 
@@ -26,7 +27,7 @@ enrich.get('/:ticker', async (req, res) => {
 
   const since7d = new Date(Date.now() - 7 * 86_400_000)
 
-  const [series, articles, nextEvent, recentEvents, ownership, surprises, recTrends, shortInt, nextMacro, priceStats] = await Promise.all([
+  const [series, articles, nextEvent, recentEvents, ownership, surprises, recTrends, shortInt, nextMacro, priceStats, typo] = await Promise.all([
     TickerInsight.find({ ticker }).sort({ date: 1 }).limit(14).lean(),
     Article.find({ tickers: ticker, analyzed: true, publishedAt: { $gte: since7d } })
       .sort({ publishedAt: -1 })
@@ -42,6 +43,7 @@ enrich.get('/:ticker', async (req, res) => {
     ShortInterest.findOne({ ticker }).sort({ settlementDate: -1 }).lean(),
     MacroEvent.findOne({ date: { $gte: new Date() }, impact: 'high' }).sort({ date: 1 }).lean(),
     PriceStat.find({ ticker }).sort({ date: -1 }).limit(30).lean(),
+    TickerTypology.findOne({ ticker }).select('tags primaryIndustry marketCapClass style volatilityClass').lean(),
   ])
 
   const latestPrice = priceStats[0] ?? null
@@ -77,6 +79,7 @@ enrich.get('/:ticker', async (req, res) => {
         ? { label: nextMacro.label, date: nextMacro.date, note: nextMacro.note ?? null }
         : null,
     },
+    typology: typo ?? null,
     priceSeries: priceStats.slice().reverse().map((p) => ({
       date: p.date, close: p.close, volume: p.volume, volumeRatio: p.volumeRatio,
     })),
