@@ -33,3 +33,18 @@ bun run dev            # API on :4100
 - [ ] Redis + BullMQ for queue-based analysis at scale
 - [ ] Webhook/SSE push into Stockfolio frontend
 - [ ] Per-user watchlists sourced from Stockfolio portfolios
+
+## Corporate Events & Investor Typology
+
+Second daily pipeline (`bun run worker:calendar`, 06:00 UTC):
+
+- **Earnings calendar** (Finnhub, free) — upcoming + recent earnings dates with EPS/revenue estimates and actuals, `bmo`/`amc` timing
+- **SEC EDGAR filings** (free, no key) — real 10-K / 10-Q / 8-K filing dates with direct document links
+- **Ownership snapshots** — insider net buying/selling (trailing 3m) from Finnhub free tier; `institutionalPct`/`topHolders` fields are schema-ready for a paid provider (Finnhub premium or FMP)
+
+### Endpoints
+- `GET /events/upcoming?days=30` — cross-watchlist event calendar (frontend calendar view)
+- `GET /events/ticker/AAPL` — next event + filing/earnings history
+- `GET /events/ownership/AAPL` — latest investor typology snapshot
+
+TASE tickers won't resolve in EDGAR — Maya report dates land in the same `CorporateEvent` collection via a future `maya` source.

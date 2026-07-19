@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "worker": "bun src/workers/ingest.ts"
+    "worker": "bun src/workers/ingest.ts",
+    "worker:calendar": "bun src/workers/calendar.ts"
   },
   "dependencies": {
     "express": "^4.19.2",
