@@ -48,3 +48,24 @@ Second daily pipeline (`bun run worker:calendar`, 06:00 UTC):
 - `GET /events/ownership/AAPL` — latest investor typology snapshot
 
 TASE tickers won't resolve in EDGAR — Maya report dates land in the same `CorporateEvent` collection via a future `maya` source.
+
+## Position Page Enrichment
+
+`GET /enrich/:ticker` — single composed payload for the Stockfolio Position page (5-min in-memory cache, `x-cache` header):
+
+```jsonc
+{
+  "summary": {            // ready-made numbers for badges — no frontend math
+    "sentiment": 0.31, "momentum": 0.12, "articleCount7d": 14,
+    "topThemes": ["ai-demand", "guidance-raise"],
+    "daysToNextEvent": 6, "insiderNet3m": -12400
+  },
+  "sentimentSeries": [],  // 14d sparkline data
+  "headlines": [],        // 5 latest tagged articles
+  "nextEvent": {},        // earnings/filing countdown
+  "recentEvents": [],
+  "ownership": {}
+}
+```
+
+Integration pattern: the Stockfolio backend proxies this route (`/api/enrich/:ticker` → insights service), keeping auth and CORS in one place. All fields degrade to `null`/`[]` when data isn't available yet — the Vue component renders what exists.
