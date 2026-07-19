@@ -1,19 +1,18 @@
 // Scheduled pipeline: fetch news -> analyze -> aggregate.
 import cron from 'node-cron'
 import { connectDB } from '../db'
+import { refreshWatchlist, getActiveTickers } from '../services/watchlist'
 import { fetchCompanyNews } from '../services/finnhub'
 import { analyzePendingArticles } from '../services/analyzer'
 import { rebuildDailyAggregates } from '../services/aggregate'
 
-const watchlist = (process.env.WATCHLIST || 'AAPL,MSFT,NVDA')
-  .split(',')
-  .map((s) => s.trim().toUpperCase())
-  .filter(Boolean)
 
 export async function runPipeline() {
-  console.log(`[pipeline] start — ${watchlist.length} tickers`)
+  await refreshWatchlist()
+  const tickers = await getActiveTickers()
+  console.log(`[pipeline] start — ${tickers.length} tickers`)
   let fetched = 0
-  for (const t of watchlist) {
+  for (const t of tickers) {
     try {
       fetched += await fetchCompanyNews(t)
       await new Promise((r) => setTimeout(r, 1100)) // stay under free-tier rate limit

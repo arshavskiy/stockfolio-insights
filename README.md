@@ -93,3 +93,26 @@ Badge example this enables: **"Earnings in 6d · AMC · beat 7/8 · +3 analyst u
 - `/enrich/:ticker` summary adds: `volumeRatio`, `unusualVolume`, `lastChangePct`, `nextMacro` — plus a 30d `priceSeries` block for charts.
 
 **Deliberately deferred: 13F institutional holdings.** 13Fs are filed *by* institutions listing their positions — building "who holds ticker X" requires ingesting and inverting every institution's filing (thousands per quarter, 45 days stale). The `OwnershipSnapshot.topHolders` schema is ready; when needed, either a paid provider (FMP) or a dedicated EDGAR 13F batch job fills it. Not worth the complexity at current stage.
+
+## Dynamic Watchlist + Quote Store (v0.5)
+
+**Watchlist is now DB-driven** (`WatchedTicker`), refreshed automatically:
+1. **portfolio tier** — distinct tickers from the Stockfolio `positions` collection (same Atlas cluster; configurable via `STOCKFOLIO_DB_NAME` / `POSITIONS_COLLECTION` / `POSITIONS_TICKER_FIELD`). Adding a position = subscribing.
+2. **manual tier** — env `WATCHLIST` pins survive everything.
+3. **discovery tier** — tickers the news analyzer surfaces ≥5 times/7d get promoted; quiet unheld tickers decay after 30d; hard cap `WATCHLIST_MAX=150` protects API budget (portfolio > manual > discovery priority).
+
+All three workers (`ingest`, `calendar`, `quotes`) iterate `getActiveTickers()`.
+
+**Quote store** (`TickerQuote`) — our DB is the UI's primary quote source:
+- `worker:quotes` polls Yahoo v8 chart (keyless, no crumb) every 5 min for fast fields: price, change, day range, volume, market state, 52w range
+- daily Finnhub profile fill: market cap, P/E, EPS, dividend yield, beta, logo
+- symbols failing 10+ times are skipped automatically
+
+**Client API:**
+- `GET /quotes?tickers=AAPL,MSFT,PLTR` — batch (Watchlist page). Returns `quotes[]` with `ageSeconds`/`stale` per row + `missing[]`. **Fallback contract:** client fetches Yahoo directly ONLY for `missing` or `stale` symbols; missing tickers are auto-subscribed so the next poll covers them.
+- `GET /quotes/:ticker` — single (Position page). 404 auto-subscribes and tells the client to retry.
+
+```
+UI ──> /quotes (our DB, ~ms)            ──> render
+   └─> Yahoo, only for missing/stale    ──> render + self-heals next cycle
+```
