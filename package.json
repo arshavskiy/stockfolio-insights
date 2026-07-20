@@ -2,23 +2,16 @@
   "name": "stockfolio-insights",
   "version": "0.1.0",
   "description": "News-driven market insights service for Stockfolio — ingestion, ticker/industry tagging, sentiment aggregation",
-  "type": "module",
   "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts",
-    "worker": "bun src/workers/ingest.ts",
-    "worker:calendar": "bun src/workers/calendar.ts",
-    "worker:quotes": "bun src/workers/quotes.ts"
+    "dev": "node --env-file-if-exists=.env --watch src/index.js",
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "worker": "node --env-file-if-exists=.env src/workers/ingest.js",
+    "worker:calendar": "node --env-file-if-exists=.env src/workers/calendar.js",
+    "worker:quotes": "node --env-file-if-exists=.env src/workers/quotes.js"
   },
   "dependencies": {
     "express": "^4.19.2",
     "mongoose": "^8.5.0",
     "node-cron": "^3.0.3"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.6",
-    "@types/node": "^26.1.1",
-    "@types/node-cron": "^3.0.11",
-    "typescript": "^7.0.2"
   }
 }
