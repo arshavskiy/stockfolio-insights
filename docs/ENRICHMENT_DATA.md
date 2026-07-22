@@ -58,9 +58,11 @@ Each collection is written by exactly one worker and never written by the API la
 | `AnalystTrend` | worker:calendar | daily | Monthly buy/hold/sell recommendation counts |
 | `OwnershipSnapshot` | worker:calendar | daily | Insider net buy/sell + (future) institutional holders |
 | `ShortInterest` | worker:calendar | twice-monthly (FINRA cadence) | Short interest, days-to-cover |
-| `MacroEvent` | seed data, static | yearly | FOMC/CPI/PPI/NFP/GDP/PCE calendar |
+| `MacroEvent` | seed data, static | yearly | FOMC/CPI/PPI/NFP/GDP/PCE calendar (dates only, no values) |
+| `MacroDataPoint` | worker:calendar | daily (mostly monthly no-ops) | Live macro *values* — fed funds rate, CPI/core PCE YoY, unemployment, 10Y yield |
 | `PriceStat` | worker:calendar | daily | OHLCV + volume-anomaly detection |
 | `TickerTypology` | worker:calendar | daily | Derived archetype (no external calls — pure classification) |
+| `FinancialFact` | worker:calendar | daily | Latest annual+quarterly fundamentals (revenue, net income, EPS, assets/liabilities, equity, operating cash flow, long-term debt) |
 | `TickerQuote` | worker:quotes | ~5 min (fast) / daily (profile) | Live-ish price quote + slow profile fields |
 | `WatchedTicker` | all workers (via watchlist service) | continuous | The dynamic watchlist itself |
 
@@ -81,6 +83,8 @@ doesn't have to hunt through §6 field-by-field to find provenance.
 | **FINRA Query API** | Free registration (client ID/secret) | Free | `ShortInterest` | Published twice monthly (FINRA's own cadence, not ours). Degrades to skip if credentials aren't configured |
 | **OpenAI (`gpt-4o-mini`, JSON mode)** | API key | Paid, usage-based | `Article.sentiment`, `Article.themes`, `Article.llmSummary`, `Article.tickers`/`industries` (tagging pass) | Batched 20 articles/call. A parse failure marks the article analyzed anyway rather than retry-looping |
 | **Static seed file** (`data/macro-2026.json`) | — | Free | `MacroEvent` | Hand-verified against federalreserve.gov (FOMC dates) + the OMB federal indicators schedule (CPI/PPI/NFP/GDP/PCE). Not fetched or scraped — updated once a year by hand |
+| **FRED** (Federal Reserve Economic Data) | Free API key (registration) | Free | `MacroDataPoint` (fed funds rate, CPI YoY, core PCE YoY, unemployment rate, 10Y Treasury yield) | Complements `MacroEvent` — that collection only has release *dates*, this has the actual *readings*. Latest observation per series only (not historical backfill); CPI/core PCE stored as computed YoY %, not raw index level. Added 2026-07-22, `fred.js` |
+| **SEC EDGAR XBRL company facts** | None (public), reuses the CIK map already built for filing dates | Free | `FinancialFact` (revenue, net income, diluted EPS, assets, liabilities, equity, operating cash flow, long-term debt) | Same free EDGAR API surface as the filing-dates source above, different endpoint (`data.sec.gov/api/xbrl/companyfacts/`). Latest annual (10-K) + latest quarterly (10-Q) value per concept only — not a historical series. Some large filers (e.g. Apple) stopped tagging the generic `Revenues` concept after adopting ASC 606; `xbrlFacts.js` falls back to `RevenueFromContractWithCustomerExcludingAssessedTax` when that happens. Skips non-US tickers gracefully (no CIK). Added 2026-07-22, `xbrlFacts.js` |
 | **Stockfolio app itself** | Same MongoDB Atlas cluster | — | `WatchedTicker` (portfolio/watchlist tiers) | Synced from the Stockfolio `positions` and `watchlists` collections — not a third-party API at all |
 | *(none — derived)* | — | — | `TickerTypology`, `TickerInsight.momentum` | Pure computation over data already sitting in our own collections — no external call, no added cost or rate-limit exposure |
 
@@ -289,6 +293,37 @@ Use this section when reading collections **directly from Mongo** (the Stockfoli
 | `type` | enum | fomc, cpi, ppi, nfp, gdp, pce |
 | `date`, `label`, `impact` (`high`\|`medium`), `timeET`, `note` | — | Seeded from `data/macro-2026.json`, verified against federalreserve.gov + OMB schedule. Update yearly, not scraped |
 
+### `MacroDataPoint` (FRED, live macro values — not ticker-specific)
+| Field | Type | Notes |
+|---|---|---|
+| `series` | string | FRED series id: `FEDFUNDS`, `CPIAUCSL`, `PCEPILFE`, `UNRATE`, `DGS10` |
+| `date` | string `YYYY-MM-DD` | Observation date reported by FRED |
+| `value` | number | Raw level for `FEDFUNDS`/`UNRATE`/`DGS10` (percent); **computed year-over-year %** for `CPIAUCSL`/`PCEPILFE`, not the raw index |
+| `unit` | string | `percent` or `yoy_pct` |
+| `source` | string | always `fred` |
+
+One document per `(series, date)` — a global macro snapshot, not scoped to any ticker. Fetched
+once per `worker:calendar` run; since these series update monthly, most days upsert nothing new
+(no-op, not a failure).
+
+### `FinancialFact` (SEC EDGAR XBRL, latest fundamentals per ticker)
+| Field | Type | Notes |
+|---|---|---|
+| `ticker` | string | |
+| `concept` | string | Normalized name: `Revenues`, `NetIncomeLoss`, `EarningsPerShareDiluted`, `Assets`, `Liabilities`, `StockholdersEquity`, `NetCashProvidedByUsedInOperatingActivities`, `LongTermDebtNoncurrent` |
+| `period` | string | `FY2025` (annual, from the latest 10-K) or `2026-Q2` (quarterly, from the latest 10-Q) |
+| `fiscalPeriodType` | enum | `annual` \| `quarterly` |
+| `value` | number | Raw reported value |
+| `unit` | string | `USD` or `USD/shares` (EPS only) |
+| `filed` | Date | Date the underlying filing was submitted to EDGAR |
+| `source` | string | always `sec-xbrl` |
+
+Two documents per ticker per concept (one annual, one quarterly) — **latest value only**, not a
+historical time series. A ticker with no matching CIK (non-US listing) or that hasn't tagged a
+given concept in XBRL simply has fewer/no `FinancialFact` docs for it — same graceful-skip
+pattern as `CorporateEvent`'s SEC filings. No derived ratios (P/E, debt/equity, revenue growth)
+are computed from this yet — it's raw reported line items only.
+
 ### `PriceStat` (Stooq daily OHLCV)
 | Field | Type | Notes |
 |---|---|---|
@@ -382,10 +417,35 @@ Practical implications for the client:
 | `sourceId`, `url` | — | Dedup key: `(source, sourceId)` or `url` |
 | `headline`, `summary`, `publishedAt` | — | Raw |
 | `analyzed` | boolean | Whether the LLM pass has run |
-| `tickers[]`, `industries[]` | string[] | LLM-assigned; Yahoo articles also seed from `relatedTickers` |
+| `tickers[]`, `industries[]` | string[] | LLM-assigned and authoritative post-analysis (see §7.1 below) — pre-analysis, seeded from Finnhub's per-symbol company-news result or Yahoo's own `relatedTickers` |
 | `sentiment` | number | −1..1, LLM-assigned |
 | `themes[]` | string[] | e.g. `['china-demand','antitrust']` |
 | `llmSummary` | string | Short LLM-generated summary |
+
+#### 7.1 Ticker relevance — how a wrong tag used to survive forever (fixed 2026-07-22)
+
+Both news sources seed `Article.tickers` with a pre-analysis guess *before* the LLM ever reads
+the article — Finnhub's company-news result implies the ticker searched by is relevant; Yahoo's
+search endpoint used to force-tag the searched-for ticker onto every result even when the
+article was unrelated (Yahoo's `v1/finance/search?q=X` returns items merely *matching* the
+query, not necessarily *about* X). The analyzer then used to `union` its own LLM-derived ticker
+list with that seed instead of replacing it — so a wrong pre-analysis tag from either source
+could never be corrected, even after the LLM correctly determined the article wasn't relevant.
+Verified live: a Finnhub-sourced "Meta in talks with Anthropic over a $10B AI deal" article had
+been permanently tagged `SPCX` purely because it showed up while fetching SpaceX's company news.
+
+Fixed in two places:
+- `analyzer.js` now **replaces** `Article.tickers` with the LLM's own output on every analysis
+  pass — the LLM read the actual headline/summary and is authoritative. A ticker it misses (not
+  named in the text) is a smaller cost than a wrong ticker polluting another company's sentiment
+  rollup, headlines feed, and the Portfolio client's related-tickers graph indefinitely.
+- `yahoo.js` no longer force-seeds the searched-for ticker; it seeds from Yahoo's own
+  `relatedTickers` field only (a real, if imperfect, relevance signal) and lets the LLM pass
+  correct it, same as every other source.
+
+A one-time backfill (`scripts/backfill-yahoo-ticker-tags.js` + `scripts/run-analyzer-backlog.js`)
+reset `analyzed:false` on all ~6,600 previously-analyzed articles and re-ran them through the
+corrected analyzer so historical tags got fixed too, not just new ingestion going forward.
 
 ### `TickerQuote` — see §6 table (same fields, this is the raw doc `/quotes` shapes from)
 
@@ -414,3 +474,39 @@ These are known, not bugs to chase — see CLAUDE.md "Known gaps" for full detai
    built.
 4. Every `summary.*` field can independently be `null` — badges should render conditionally
    per-field, not gate the whole card on one field being present.
+5. **`MacroDataPoint` and `FinancialFact` are not yet in `/enrich/:ticker`** — both collections
+   are populated by `worker:calendar` (see §2/§3/§7) but `getEnrichment()` in the Portfolio
+   backend's `stockfolioInsightsService.js` doesn't query them yet, and nothing renders them in
+   `TickerInsightCard.vue`. Data exists in MongoDB; the read/UI wiring is a follow-up.
+6. **`MacroDataPoint` will be empty until `FRED_API_KEY` is set** — the fetch code is wired into
+   `worker:calendar` and degrades gracefully (logs a per-series error, upserts 0) without a key,
+   same pattern as FINRA short interest. Get a free key at
+   `fred.stlouisfed.org/docs/api/api_key.html`.
+
+---
+
+## 9. Recent fixes on the Portfolio (client) side — 2026-07-22
+
+These didn't change this repo's schemas or workers, but changed how the Portfolio app reads and
+renders the data described above — noted here since they affect what the client actually shows.
+
+- **Watchlist "Insider" sort mode**: new grouping mode (alongside Market/Change/Div/Industry)
+  bucketing watchlist rows into Insider buying / Insider selling / No data, backed by a new
+  bulk `getInsiderSnapshots()` lookup in `stockfolioInsightsService.js` (one aggregation query
+  for the whole watchlist against `OwnershipSnapshot`, not N calls to `/enrich`). The sort and
+  badge size the move as **insider $ traded ÷ market cap**, not raw share count — a small-cap's
+  modest trade can now correctly outrank a mega-cap's larger-but-trivial one.
+- **Ticker news consolidation**: the Position page used to show two separate, redundant "news
+  for this ticker" lists — `TickerInsightCard`'s inline headlines (this repo's `Article`
+  collection) and a second GNews-backed paginated section (Portfolio's own, unrelated
+  `/stocks/news` pipeline). Consolidated to one list, backed by this repo's LLM-tagged data, now
+  with its own pagination via a new `GET /enrich/news/:ticker` endpoint
+  (`getTickerNews()` in `stockfolioInsightsService.js` — 90-day lookback, real `skip`/`limit`
+  pagination, uncached since the `Article` collection is append-only once analyzed).
+- **`TickerInsightCard` headline summaries were silently dropping** — the client-side mapping
+  from this repo's `Article.llmSummary` field only carried `headline`/`url`/`publishedAt`
+  through to the render, so every headline card showed a title with no summary text. Fixed to
+  map `llmSummary` through too.
+- **Related Tickers / Typology Map empty states rendered as unstyled plain text** on the
+  Portfolio client — a CSS class both referenced was never actually defined. Not a data issue on
+  this repo's side; purely a Portfolio client styling bug, now fixed.
