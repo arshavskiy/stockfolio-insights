@@ -19,6 +19,6 @@
     "concurrently": "^10.0.3"
   },
   "engines": {
-    "node": "23.x"
+    "node": "20.x"
   }
 }
