@@ -8,6 +8,7 @@ const { analyzePendingArticles } = require('../services/analyzer')
 const { rebuildDailyAggregates } = require('../services/aggregate')
 
 async function runPipeline() {
+  // Refresh the watchlist first so ingestion always targets the current active universe.
   await refreshWatchlist()
   const tickers = await getActiveTickers()
   console.log(`[pipeline] start — ${tickers.length} tickers`)

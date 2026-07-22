@@ -10,6 +10,7 @@ const CONCURRENCY = 5
 const MAX_FAILS = 10
 
 async function runQuotePoll() {
+  // Poll the current active watchlist and skip symbols that have failed too often.
   const tickers = await getActiveTickers()
   const dead = new Set(
     (await TickerQuote.find({ failCount: { $gte: MAX_FAILS } }).select('ticker').lean())

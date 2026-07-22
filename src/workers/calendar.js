@@ -14,6 +14,8 @@ const { refreshProfile } = require('../services/yahoo')
 const { computeTypology } = require('../services/typology')
 
 async function runCalendarPipeline() {
+  // Rebuild the active watchlist first so the slow-moving calendar enrichments
+  // are computed for the same universe as the news pipeline.
   await refreshWatchlist()
   const tickers = await getActiveTickers()
   console.log(`[calendar] start — ${tickers.length} tickers`)
@@ -30,21 +32,31 @@ async function runCalendarPipeline() {
     console.error('[calendar] earnings failed:', e.message)
   }
   for (const t of tickers) {
-    try {
-      const filings = await fetchSecFilings(t)
-      await refreshOwnership(t)
-      await fetchEarningsSurprises(t)
-      await fetchAnalystTrends(t)
-      await fetchDividends(t)
-      await fetchShortInterest(t)
-      await fetchDailyCandles(t)
-      await refreshProfile(t)
-      await computeTypology(t)
-      console.log(`[calendar] ${t}: ${filings} filings + fundamentals refreshed`)
-      await new Promise((r) => setTimeout(r, 2200)) // ~5 Finnhub calls per ticker; stay under 60/min
-    } catch (e) {
-      console.error(`[calendar] ${t} failed:`, e.message)
+    const steps = [
+      ['secFilings', () => fetchSecFilings(t)],
+      ['ownership', () => refreshOwnership(t)],
+      ['earningsSurprises', () => fetchEarningsSurprises(t)],
+      ['analystTrends', () => fetchAnalystTrends(t)],
+      ['dividends', () => fetchDividends(t)],
+      ['shortInterest', () => fetchShortInterest(t)],
+      ['dailyCandles', () => fetchDailyCandles(t)],
+      ['profile', () => refreshProfile(t)],
+      ['typology', () => computeTypology(t)],
+    ]
+    let filings = 0
+    let okCount = 0
+    for (const [name, run] of steps) {
+      try {
+        const result = await run()
+        if (name === 'secFilings') filings = result
+        okCount++
+        console.log(`[calendar] ${t}.${name}: ok`)
+      } catch (e) {
+        console.error(`[calendar] ${t}.${name} failed:`, e.message)
+      }
     }
+    console.log(`[calendar] ${t}: ${filings} filings, ${okCount}/${steps.length} steps ok`)
+    await new Promise((r) => setTimeout(r, 2200)) // ~5 Finnhub calls per ticker; stay under 60/min
   }
   console.log('[calendar] done')
 }

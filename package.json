@@ -7,11 +7,15 @@
     "start": "node --env-file-if-exists=.env src/index.js",
     "worker": "node --env-file-if-exists=.env src/workers/ingest.js",
     "worker:calendar": "node --env-file-if-exists=.env src/workers/calendar.js",
-    "worker:quotes": "node --env-file-if-exists=.env src/workers/quotes.js"
+    "worker:quotes": "node --env-file-if-exists=.env src/workers/quotes.js",
+    "worker:all": "concurrently -n ingest,calendar,quotes -c blue,magenta,green \"npm:worker\" \"npm:worker:calendar\" \"npm:worker:quotes\""
   },
   "dependencies": {
     "express": "^4.19.2",
     "mongoose": "^8.5.0",
     "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
   }
 }

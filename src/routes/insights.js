@@ -1,3 +1,4 @@
+// Read-only insight endpoints for ticker timelines and industry rollups.
 const { Router } = require('express')
 const { Article } = require('../models/Article')
 const { TickerInsight } = require('../models/TickerInsight')

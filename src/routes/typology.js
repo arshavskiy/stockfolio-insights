@@ -1,3 +1,4 @@
+// Read-only typology endpoints for overview maps and per-ticker labels.
 const { Router } = require('express')
 const { TickerTypology } = require('../models/TickerTypology')
 

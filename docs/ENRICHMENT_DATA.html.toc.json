@@ -1,0 +1,47 @@
+[
+  {
+    "level": 1,
+    "text": "Enrichment Data & Flow — for the Stockfolio Client",
+    "id": "enrichment-data-flow-for-the-stockfolio-client"
+  },
+  {
+    "level": 2,
+    "text": "1. High-level flow",
+    "id": "1-high-level-flow"
+  },
+  {
+    "level": 2,
+    "text": "2. Collections (source of truth)",
+    "id": "2-collections-source-of-truth"
+  },
+  {
+    "level": 2,
+    "text": "3. Data sources — where every field actually comes from",
+    "id": "3-data-sources-where-every-field-actually-comes-from"
+  },
+  {
+    "level": 2,
+    "text": "4. GET /enrich/:ticker — the composed Position-page payload",
+    "id": "4-get-enrich-ticker-the-composed-position-page-payload"
+  },
+  {
+    "level": 2,
+    "text": "5. Worked example — the \"Ticker Insight\" card",
+    "id": "5-worked-example-the-ticker-insight-card"
+  },
+  {
+    "level": 2,
+    "text": "6. GET /quotes and GET /quotes/:ticker — live-ish price data",
+    "id": "6-get-quotes-and-get-quotes-ticker-live-ish-price-data"
+  },
+  {
+    "level": 2,
+    "text": "7. Field reference by collection",
+    "id": "7-field-reference-by-collection"
+  },
+  {
+    "level": 2,
+    "text": "8. Gaps the client should design around today",
+    "id": "8-gaps-the-client-should-design-around-today"
+  }
+]

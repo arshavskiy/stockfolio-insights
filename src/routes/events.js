@@ -1,3 +1,4 @@
+// Read-only event endpoints for earnings, filings, and ownership snapshots.
 const { Router } = require('express')
 const { CorporateEvent } = require('../models/CorporateEvent')
 const { OwnershipSnapshot } = require('../models/OwnershipSnapshot')

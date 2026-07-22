@@ -14,6 +14,7 @@ const { TickerTypology } = require('../models/TickerTypology')
 const enrich = Router()
 
 const TTL_MS = 5 * 60 * 1000
+// Keep the read-heavy position payloads in memory for a short TTL.
 const cache = new Map()
 
 enrich.get('/:ticker', async (req, res) => {

@@ -9,6 +9,7 @@ const quotes = Router()
 
 const STALE_SECONDS = Number(process.env.QUOTE_STALE_SECONDS) || 600
 
+// Normalize quote documents into the contract expected by the frontend.
 function shape(q) {
   const age = q.quoteUpdatedAt
     ? Math.round((Date.now() - new Date(q.quoteUpdatedAt).getTime()) / 1000)
