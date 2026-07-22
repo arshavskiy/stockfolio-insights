@@ -6,10 +6,12 @@ const { loadCikMap } = require('./secFilings')
 
 const UA = process.env.SEC_USER_AGENT || 'StockfolioInsights research contact@example.com'
 
-// Normalized concept name -> { unit, tags: [us-gaap tag names to try, in order] }.
-// Some companies (Apple included) stopped reporting the generic `Revenues`
-// tag after adopting ASC 606 and only report the contract-revenue tag —
-// try the modern tag first since it's what most large filers use today.
+// Normalized concept name -> { unit, tags: [candidate us-gaap tag names].
+// Revenue in particular has two live tags across different filers (some
+// still use generic `Revenues`, others moved to the ASC-606 contract-revenue
+// tag) and which one a given company currently updates isn't predictable
+// from list order — resolveEntries() below picks whichever has the newest
+// filed entry, per ticker.
 const CONCEPTS = {
   Revenues: { unit: 'USD', tags: ['RevenueFromContractWithCustomerExcludingAssessedTax', 'Revenues'] },
   NetIncomeLoss: { unit: 'USD', tags: ['NetIncomeLoss'] },
@@ -27,13 +29,29 @@ function latestByForm(entries, form) {
   return matches.reduce((a, b) => (new Date(b.end) > new Date(a.end) ? b : a))
 }
 
-// Try each candidate tag in order, return the first with any usable entries.
+// Some concepts have more than one candidate XBRL tag (e.g. revenue: older
+// filers still use the generic `Revenues`, others migrated to
+// `RevenueFromContractWithCustomerExcludingAssessedTax` after ASC 606) —
+// and which one is "current" for a given company isn't fixed: a filer can
+// stop updating either tag while continuing the other. Picking by list
+// order caused a real bug (NVDA's abandoned contract-revenue tag looked
+// "found" while its actual current filings use `Revenues`, silently
+// pairing FY2022 revenue with FY2026 net income). Instead, evaluate every
+// candidate tag and keep whichever one's most recent entry is newest.
 function resolveEntries(gaap, tags, unitKey) {
+  let best = null
+  let bestDate = null
   for (const tag of tags) {
     const entries = gaap[tag]?.units?.[unitKey]
-    if (entries && entries.length) return entries
+    if (!entries || !entries.length) continue
+    const latest = entries.reduce((a, b) => (new Date(b.end) > new Date(a.end) ? b : a))
+    const latestDate = new Date(latest.end)
+    if (!bestDate || latestDate > bestDate) {
+      best = entries
+      bestDate = latestDate
+    }
   }
-  return null
+  return best
 }
 
 async function fetchXbrlFacts(ticker) {
