@@ -109,9 +109,16 @@ async function fetchYahooNews(ticker, count = 20) {
             url: item.link,
             headline: item.title,
             publishedAt: new Date((item.providerPublishTime || 0) * 1000),
-            tickers: (item.relatedTickers || []).includes(ticker)
-              ? [ticker]
-              : [ticker, ...(item.relatedTickers || [])],
+            // Seed from Yahoo's own relatedTickers only — NOT the searched-for
+            // `ticker` itself. Yahoo's search endpoint returns items merely
+            // matching the query, not necessarily articles about that ticker
+            // (e.g. searching "SPCX" surfaces unrelated market-roundup pieces
+            // that happen to rank for it). Forcing `ticker` in here regardless
+            // used to tag every such article as relevant, polluting sentiment
+            // rollups and the related-tickers graph. The analyzer step's LLM
+            // pass (reading the actual headline/summary) is the authoritative
+            // relevance signal and overwrites this on analysis — see analyzer.js.
+            tickers: item.relatedTickers || [],
           },
         },
         { upsert: true }

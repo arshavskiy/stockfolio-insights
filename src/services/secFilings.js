@@ -92,4 +92,4 @@ async function fetchSecFilings(ticker) {
   return upserted
 }
 
-module.exports = { fetchSecFilings }
+module.exports = { fetchSecFilings, loadCikMap }

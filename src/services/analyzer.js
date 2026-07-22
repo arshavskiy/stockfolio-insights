@@ -68,7 +68,16 @@ ${JSON.stringify(payload)}`
         ? {
             $set: {
               analyzed: true,
-              tickers: [...new Set([...(pending[i].tickers || []), ...r.tickers])],
+              // Authoritative: the LLM read the actual headline/summary text.
+              // Previously unioned with the pre-analysis seed (Yahoo relatedTickers
+              // / Finnhub company-news ticker), which let an irrelevant seed tag
+              // survive analysis forever — e.g. a search-query ticker force-added
+              // pre-LLM would never get removed even though the LLM correctly
+              // saw the article wasn't about it. Replacing avoids that; a
+              // ticker the LLM misses (not named in headline/summary) is a much
+              // smaller cost than a wrong ticker polluting another company's
+              // sentiment/news feed indefinitely.
+              tickers: [...new Set(r.tickers)],
               industries: r.industries,
               sentiment: Math.max(-1, Math.min(1, r.sentiment)),
               themes: r.themes,

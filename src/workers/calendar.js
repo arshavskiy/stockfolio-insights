@@ -9,9 +9,11 @@ const { refreshOwnership } = require('../services/ownership')
 const { fetchEarningsSurprises, fetchAnalystTrends, fetchDividends } = require('../services/fundamentals')
 const { fetchShortInterest } = require('../services/shortInterestSvc')
 const { seedMacroCalendar } = require('../services/macro')
+const { fetchMacroSeries } = require('../services/fred')
 const { fetchDailyCandles } = require('../services/prices')
 const { refreshProfile } = require('../services/yahoo')
 const { computeTypology } = require('../services/typology')
+const { fetchXbrlFacts } = require('../services/xbrlFacts')
 
 async function runCalendarPipeline() {
   // Rebuild the active watchlist first so the slow-moving calendar enrichments
@@ -24,6 +26,12 @@ async function runCalendarPipeline() {
     if (macro) console.log(`[calendar] macro events seeded: ${macro}`)
   } catch (e) {
     console.error('[calendar] macro seed failed:', e.message)
+  }
+  try {
+    const macroPoints = await fetchMacroSeries()
+    console.log(`[calendar] FRED macro points upserted: ${macroPoints}`)
+  } catch (e) {
+    console.error('[calendar] FRED fetch failed:', e.message)
   }
   try {
     const earnings = await fetchEarningsCalendar()
@@ -41,6 +49,7 @@ async function runCalendarPipeline() {
       ['shortInterest', () => fetchShortInterest(t)],
       ['dailyCandles', () => fetchDailyCandles(t)],
       ['profile', () => refreshProfile(t)],
+      ['xbrlFacts', () => fetchXbrlFacts(t)],
       ['typology', () => computeTypology(t)],
     ]
     let filings = 0

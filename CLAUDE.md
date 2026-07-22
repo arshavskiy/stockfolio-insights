@@ -35,11 +35,13 @@ WORKERS (write-only, run locally)             COLLECTIONS                 READ S
 worker:ingest   */20min  news(Finnhub+Yahoo)  Article, TickerInsight      Portfolio backend reads
                          →LLM→aggregate                                   these collections directly
 worker:calendar daily    events/fundamentals  CorporateEvent, Analyst-    via Mongoose useDb() —
-                         prices, typology     Trend, ShortInterest,       see stockfolioInsightsService.js
-                                              PriceStat, MacroEvent,       in the Portfolio repo.
-                                              OwnershipSnapshot,          This repo's own /insights,
-                                              TickerTypology              /events, /typology, /quotes,
-worker:quotes   */5min   Yahoo v8 quotes      TickerQuote                 /enrich routes are NOT used.
+                         prices, typology,    Trend, ShortInterest,       see stockfolioInsightsService.js
+                         macro values, XBRL   PriceStat, MacroEvent,      in the Portfolio repo.
+                         financials           MacroDataPoint,             This repo's own /insights,
+                                              OwnershipSnapshot,          /events, /typology, /quotes,
+                                              TickerTypology,             /enrich routes are NOT used.
+                                              FinancialFact
+worker:quotes   */5min   Yahoo v8 quotes      TickerQuote
                                               WatchedTicker
 ```
 - All workers start with `refreshWatchlist()` then loop `getActiveTickers()` (src/services/watchlist.ts)
@@ -55,6 +57,8 @@ worker:quotes   */5min   Yahoo v8 quotes      TickerQuote                 /enric
 - **FINRA** short interest — needs free registration (FINRA_CLIENT_ID/SECRET), degrades to skip
 - **Dividends** (Finnhub): 403-safe skip — endpoint tier keeps changing
 - **Macro calendar**: seeded from `data/macro-2026.json` — official 2026 FOMC/CPI/PPI/NFP/GDP/PCE dates, verified against federalreserve.gov + OMB schedule. Update yearly, don't fetch/scrape
+- **FRED** (free, registration required — `FRED_API_KEY`): live macro *values* — Fed funds rate, CPI/core PCE YoY, unemployment, 10Y yield — into `MacroDataPoint`. Complements `MacroEvent` (dates only) with the actual readings. `fetchMacroSeries()` in `fred.js`, latest observation per series only, not a historical backfill
+- **SEC EDGAR XBRL company facts** (free, no key, reuses `secFilings.js`'s CIK map via `loadCikMap()`): latest annual (10-K) + latest quarterly (10-Q) value for ~8 core financial-statement concepts (revenue, net income, diluted EPS, assets/liabilities, equity, operating cash flow, long-term debt) → `FinancialFact`. Fills the fundamentals gap without needing a paid provider (FMP/EODHD); full historical series deliberately out of scope — latest values only, matching the lightweight snapshot style of `PriceStat`/`AnalystTrend`
 - **13F institutional holdings: DEFERRED deliberately** — requires inverting thousands of institution filings, 45d stale. `OwnershipSnapshot.topHolders` schema is ready for a paid provider. Do not build an EDGAR 13F parser unless explicitly asked
 - **LLM analysis**: OpenAI `gpt-4o-mini` (JSON mode), batched 20 articles/call, JSON-only prompt in analyzer.js. Switched from Claude Haiku since Pavel already has a working `OPENAI_API_KEY` (shared with the Portfolio app's AI features) and no Anthropic key on hand. Parse-failure → mark analyzed anyway (no retry loops)
 
