@@ -32,14 +32,17 @@ async function fetchMacroSeries() {
   let upserted = 0
   for (const [seriesId, cfg] of Object.entries(SERIES)) {
     try {
-      const obs = await fetchObservations(seriesId, cfg.yoy ? 13 : 1)
+      // Fetch a few extra months of buffer for YoY series — an occasional
+      // missing reading (e.g. a reporting gap) would otherwise shrink the
+      // post-filter array below the 12-back index we need.
+      const obs = await fetchObservations(seriesId, cfg.yoy ? 15 : 1)
       if (!obs.length) continue
 
       const latest = obs[0]
       let value = Number(latest.value)
       if (cfg.yoy) {
-        const yearAgo = obs[obs.length - 1] // ~12 observations back (monthly series)
-        if (!yearAgo || obs.length < 13) continue
+        const yearAgo = obs[12] // 12 valid monthly observations back from latest
+        if (!yearAgo) continue
         value = ((Number(latest.value) - Number(yearAgo.value)) / Number(yearAgo.value)) * 100
       }
 
