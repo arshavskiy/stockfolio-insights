@@ -10,6 +10,7 @@ Bun · Express · MongoDB (Mongoose) · node-cron · Finnhub API · Anthropic AP
 ## Architecture
 ```
 [cron worker] -> finnhub company-news -> Article (raw)
+             -> Globes RSS + Bizportal lists -> Article (raw)
              -> Claude batch analysis -> Article (tickers/industries/sentiment/themes)
              -> daily aggregation     -> TickerInsight (per ticker per day + momentum)
 [express api] -> /insights/ticker/:t | /insights/industry/:i | /insights/trending
@@ -29,7 +30,8 @@ bun run dev            # API on :4100
 - `GET /insights/trending` — most-covered tickers today
 
 ## Roadmap
-- [ ] RSS sources (Globes/TheMarker/Maya) for TASE coverage
+- [x] Israeli business-news sources (Globes RSS + Bizportal list scraping) for TASE coverage
+- [ ] Maya announcements for TASE corporate events
 - [ ] Redis + BullMQ for queue-based analysis at scale
 - [ ] Webhook/SSE push into Stockfolio frontend
 - [ ] Per-user watchlists sourced from Stockfolio portfolios
@@ -48,6 +50,19 @@ Second daily pipeline (`bun run worker:calendar`, 06:00 UTC):
 - `GET /events/ownership/AAPL` — latest investor typology snapshot
 
 TASE tickers won't resolve in EDGAR — Maya report dates land in the same `CorporateEvent` collection via a future `maya` source.
+
+For `.TA` analyst consensus, `fetchAnalystTrends()` keeps Finnhub first and falls back to
+Investing.com's consensus page when Finnhub returns no rows or errors. Investing URLs use
+equity slugs rather than Yahoo symbols, so expand coverage with:
+
+```bash
+INVESTING_EQUITY_SLUGS='{"POLI.TA":"bank-hapoalim"}'
+```
+
+The scraper stores `source`, `sourceUrl`, analyst count, and 12-month target-price fields on
+`AnalystTrend`. TASE target prices are normalized to shekels. Treat it as best-effort
+market-data enrichment, not a regulatory source. Investing may serve a Cloudflare challenge to
+script clients; in that case the pipeline skips the ticker rather than failing the worker.
 
 ## Position Page Enrichment
 
@@ -77,7 +92,7 @@ Added to the daily calendar pipeline (~5 Finnhub calls per ticker, rate-paced):
 | Data | Source | Where it lands |
 |---|---|---|
 | Earnings surprise history (beat/miss %) | Finnhub free | `CorporateEvent.surprisePct` |
-| Analyst rec trends (monthly buy/hold/sell) | Finnhub free | `AnalystTrend` |
+| Analyst rec trends (monthly buy/hold/sell) | Finnhub free, Investing.com consensus fallback for mapped `.TA` symbols | `AnalystTrend` |
 | Dividend events (ex-date, pay date, amount) | Finnhub (403-safe skip if premium-gated) | `CorporateEvent` type `dividend` |
 | Short interest + days-to-cover | FINRA Query API (free registration) | `ShortInterest` |
 | 8-K item classification (executive-change, restatement, M&A...) | EDGAR submissions `items` field — no LLM needed | `CorporateEvent.itemLabels` |
@@ -102,6 +117,19 @@ Badge example this enables: **"Earnings in 6d · AMC · beat 7/8 · +3 analyst u
 3. **discovery tier** — tickers the news analyzer surfaces ≥5 times/7d get promoted; quiet unheld tickers decay after 30d; hard cap `WATCHLIST_MAX=150` protects API budget (portfolio > manual > discovery priority).
 
 All three workers (`ingest`, `calendar`, `quotes`) iterate `getActiveTickers()`.
+
+The ingest worker also fetches Israeli business-news sources once per run, independent of
+individual ticker loops:
+
+- Globes Hebrew RSS feeds for all news and capital-market news.
+- Bizportal HTML list pages, including the analyst-recommendations tag page and capital-market news.
+
+Configure with `ISRAELI_NEWS_ENABLED=false` to disable, or override the source list with
+`ISRAELI_NEWS_SOURCES` JSON. The one-shot command is:
+
+```bash
+npm run worker:israeli-news
+```
 
 **Quote store** (`TickerQuote`) — our DB is the UI's primary quote source:
 - `worker:quotes` polls Yahoo v8 chart (keyless, no crumb) every 5 min for fast fields: price, change, day range, volume, market state, 52w range

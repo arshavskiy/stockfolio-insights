@@ -77,6 +77,8 @@ doesn't have to hunt through §6 field-by-field to find provenance.
 | Provider | Auth | Cost | Feeds | Notes |
 |---|---|---|---|---|
 | **Finnhub** | API key (free tier) | Free, 60 calls/min | `Article` (company news), `CorporateEvent` (earnings calendar + surprises, dividends), `AnalystTrend`, `OwnershipSnapshot` (insider tx), `TickerQuote` (profile: market cap, P/E, EPS, dividend yield, beta, logo) | Primary paid-tier-free source for fundamentals. Workers pace calls with sleeps to stay under rate limit. Dividends endpoint 403-safe-skips if Finnhub gates it behind a paid tier |
+| **Investing.com consensus** (unofficial scraper) | None | Free | `AnalystTrend` fallback for mapped `.TA` symbols | Used only when Finnhub recommendation data is unavailable/empty for TASE symbols. URLs require an equity slug, configured with `INVESTING_EQUITY_SLUGS` JSON; default map covers a few large TA-35 names. Stores `source`, `sourceUrl`, analyst count, and 12-month target-price metadata. TASE target prices are normalized from agorot-like display values to shekels. Fragile by nature; parser is isolated in `investingConsensus.js`. |
+| **Globes + Bizportal** (RSS/HTML) | None | Free | `Article` | Globes RSS is the stable path for Israeli business news; Bizportal list pages add capital-market and analyst-recommendation coverage. Ingested once per news worker run and then processed by the same LLM ticker/sentiment analyzer as Finnhub/Yahoo. Configure with `ISRAELI_NEWS_SOURCES`; parser is isolated in `israeliNews.js`. |
 | **Yahoo Finance** (unofficial, keyless) | None | Free | `Article` (`source:'yahoo'`, second news feed), `TickerQuote` (fast fields: price/change/volume via v8 chart) | `v1/finance/search` covers tickers Finnhub 403s on (e.g. TASE `.TA`); `v8/finance/chart` used for live quotes because `v7/quote` needs a cookie/crumb we don't want to depend on. Both are unofficial APIs — if they break, the fix is scoped to `yahoo.js` only |
 | **SEC EDGAR** | None (public) | Free | `CorporateEvent` (10-K/10-Q/8-K filing dates + 8-K item codes) | 8-K item codes come directly in the free `submissions` JSON (`recent.items`) — mapped to human labels in `secFilings.js`, **no LLM involved**. Skips non-US tickers gracefully |
 | **Stooq** | None | Free | `PriceStat` (daily OHLCV, volume-anomaly detection) | ⚠️ Currently blocked by a JS proof-of-work challenge page (since 2026-07-19) — see §7 gaps. Chosen originally because Finnhub's candle endpoint went premium |
@@ -277,6 +279,10 @@ Use this section when reading collections **directly from Mongo** (the Stockfoli
 |---|---|---|
 | `period` | string `YYYY-MM-01` | |
 | `strongBuy`, `buy`, `hold`, `sell`, `strongSell` | number | Monthly counts. Read as MoM delta, not absolute level |
+| `analystCount` | number | Total analysts behind the consensus when the source exposes it |
+| `targetPriceAvg`, `targetPriceHigh`, `targetPriceLow` | number | 12-month analyst target prices when available |
+| `currency` | string | Target-price currency, currently `ILS` for Investing.com TASE fallback after shekel normalization |
+| `source`, `sourceUrl` | string | Provider provenance (`finnhub` or `investing-consensus`) and source page URL when scraped |
 
 ### `ShortInterest` (FINRA, twice-monthly)
 | Field | Type | Notes |

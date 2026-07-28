@@ -3,6 +3,7 @@
 // gracefully on 403 instead of failing the pipeline.
 const { CorporateEvent } = require('../models/CorporateEvent')
 const { AnalystTrend } = require('../models/AnalystTrend')
+const { fetchInvestingConsensus } = require('./investingConsensus')
 
 const BASE = 'https://finnhub.io/api/v1'
 const key = () => {
@@ -39,19 +40,38 @@ async function fetchEarningsSurprises(ticker) {
 
 // ---- Analyst recommendation trends (monthly buy/hold/sell counts) ----
 async function fetchAnalystTrends(ticker) {
-  const res = await fetch(`${BASE}/stock/recommendation?symbol=${ticker}&token=${key()}`)
-  if (!res.ok) throw new Error(`finnhub recommendation ${res.status} for ${ticker}`)
-  const rows = await res.json()
+  const symbol = ticker.toUpperCase()
+  let rows = []
+  try {
+    const res = await fetch(`${BASE}/stock/recommendation?symbol=${ticker}&token=${key()}`)
+    if (!res.ok) throw new Error(`finnhub recommendation ${res.status} for ${ticker}`)
+    rows = await res.json()
+  } catch (e) {
+    if (!symbol.endsWith('.TA')) throw e
+    console.warn(`[fundamentals] Finnhub recommendation unavailable for ${symbol}; trying Investing.com consensus`)
+    return fetchInvestingConsensus(symbol)
+  }
 
   let upserted = 0
   for (const r of (rows || []).slice(0, 12)) {          // keep a year of history
     await AnalystTrend.updateOne(
-      { ticker: ticker.toUpperCase(), period: r.period },
-      { $set: { strongBuy: r.strongBuy, buy: r.buy, hold: r.hold, sell: r.sell, strongSell: r.strongSell } },
+      { ticker: symbol, period: r.period },
+      {
+        $set: {
+          strongBuy: r.strongBuy,
+          buy: r.buy,
+          hold: r.hold,
+          sell: r.sell,
+          strongSell: r.strongSell,
+          analystCount: [r.strongBuy, r.buy, r.hold, r.sell, r.strongSell].reduce((sum, n) => sum + (n || 0), 0),
+          source: 'finnhub',
+        },
+      },
       { upsert: true }
     ).then((x) => { if (x.upsertedCount) upserted++ })
   }
-  return upserted
+  if (upserted || !symbol.endsWith('.TA')) return upserted
+  return fetchInvestingConsensus(symbol)
 }
 
 // ---- Dividend events (ex-date, pay date, amount) ----

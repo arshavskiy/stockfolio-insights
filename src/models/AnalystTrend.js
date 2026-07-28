@@ -1,7 +1,7 @@
 const mongoose = require('mongoose')
 const { Schema } = mongoose
 
-// Monthly analyst recommendation counts (Finnhub free).
+// Monthly analyst recommendation counts.
 // The signal is the month-over-month CHANGE, not the absolute level.
 const AnalystTrendSchema = new Schema(
   {
@@ -12,6 +12,13 @@ const AnalystTrendSchema = new Schema(
     hold: Number,
     sell: Number,
     strongSell: Number,
+    analystCount: Number,
+    targetPriceAvg: Number,
+    targetPriceHigh: Number,
+    targetPriceLow: Number,
+    currency: String,
+    source: { type: String, default: 'finnhub' },
+    sourceUrl: String,
   },
   { timestamps: true }
 )

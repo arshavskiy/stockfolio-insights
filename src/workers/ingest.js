@@ -4,6 +4,7 @@ const { connectDB } = require('../db')
 const { refreshWatchlist, getActiveTickers } = require('../services/watchlist')
 const { fetchCompanyNews } = require('../services/finnhub')
 const { fetchYahooNews } = require('../services/yahoo')
+const { fetchIsraeliBusinessNews } = require('../services/israeliNews')
 const { analyzePendingArticles } = require('../services/analyzer')
 const { rebuildDailyAggregates } = require('../services/aggregate')
 
@@ -30,6 +31,12 @@ async function runPipeline() {
       console.error(`[pipeline] yahoo fetch failed for ${t}:`, e.message)
     }
     console.log(`[pipeline] ${t}: +${finnhubCount} finnhub, +${yahooCount} yahoo`)
+  }
+  try {
+    const israeliCount = await fetchIsraeliBusinessNews()
+    fetched += israeliCount
+  } catch (e) {
+    console.error('[pipeline] Israeli business news fetch failed:', e.message)
   }
   // analyze in batches until queue drained (cap loops as safety)
   let analyzed = 0
