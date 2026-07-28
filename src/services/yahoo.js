@@ -3,7 +3,10 @@
 const { TickerQuote } = require('../models/TickerQuote')
 const { Article } = require('../models/Article')
 
-const UA = 'Mozilla/5.0 (compatible; StockfolioInsights/0.4)'
+// Browser User-Agent — a bot-style UA makes Yahoo serve its EU consent
+// interstitial (redirect to ...?guccounter=1) instead of JSON.
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 
 async function refreshQuote(ticker) {
   const res = await fetch(
