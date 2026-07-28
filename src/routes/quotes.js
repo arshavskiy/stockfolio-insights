@@ -9,26 +9,37 @@ const quotes = Router()
 
 const STALE_SECONDS = Number(process.env.QUOTE_STALE_SECONDS) || 600
 
+// Yahoo quotes TASE equities in agorot (currency ILA, 1/100 shekel) and we
+// store what it returns. Convert at the API boundary so callers always get
+// shekels, and report the currency as ILS to match. TASE *indices* come back
+// as ILS already and must not be scaled.
+function agorotFactor(q) {
+  return q.currency === 'ILA' ? 100 : 1
+}
+
+const scaled = (value, f) => (value == null ? null : value / f)
+
 // Normalize quote documents into the contract expected by the frontend.
 function shape(q) {
   const age = q.quoteUpdatedAt
     ? Math.round((Date.now() - new Date(q.quoteUpdatedAt).getTime()) / 1000)
     : null
+  const f = agorotFactor(q)
   return {
     ticker: q.ticker,
     name: q.name ?? null,
-    price: q.price ?? null,
-    change: q.change ?? null,
+    price: scaled(q.price, f),
+    change: scaled(q.change, f),
     changePct: q.changePct ?? null,
-    previousClose: q.previousClose ?? null,
-    dayHigh: q.dayHigh ?? null,
-    dayLow: q.dayLow ?? null,
+    previousClose: scaled(q.previousClose, f),
+    dayHigh: scaled(q.dayHigh, f),
+    dayLow: scaled(q.dayLow, f),
     volume: q.volume ?? null,
     marketState: q.marketState ?? null,
-    currency: q.currency ?? null,
+    currency: f === 100 ? 'ILS' : (q.currency ?? null),
     exchange: q.exchange ?? null,
-    fiftyTwoWeekHigh: q.fiftyTwoWeekHigh ?? null,
-    fiftyTwoWeekLow: q.fiftyTwoWeekLow ?? null,
+    fiftyTwoWeekHigh: scaled(q.fiftyTwoWeekHigh, f),
+    fiftyTwoWeekLow: scaled(q.fiftyTwoWeekLow, f),
     marketCap: q.marketCap ?? null,
     peRatio: q.peRatio ?? null,
     eps: q.eps ?? null,
