@@ -8,6 +8,31 @@ const DISCOVERY_MIN_MENTIONS = Number(process.env.DISCOVERY_MIN_MENTIONS) || 5
 const DECAY_DAYS = Number(process.env.WATCHLIST_DECAY_DAYS) || 30
 const MAX_ACTIVE = Number(process.env.WATCHLIST_MAX) || 150 // Finnhub free-tier budget
 const WATCHLISTS_COLLECTION = process.env.WATCHLISTS_COLLECTION || 'watchlists'
+const USERS_COLLECTION = process.env.USERS_COLLECTION || 'users'
+const STOCKFOLIO_USER_REF_FIELD = process.env.STOCKFOLIO_USER_REF_FIELD || 'user'
+const STOCKFOLIO_USER_TYPE_FIELD = process.env.STOCKFOLIO_USER_TYPE_FIELD || 'userType'
+const REGULAR_USER_TYPE = process.env.REGULAR_USER_TYPE || 'regular'
+const DISCOVERY_ENABLED = process.env.WATCHLIST_DISCOVERY_ENABLED === 'true'
+
+function nonRegularUserStages() {
+  const userTypePath = `owner.${STOCKFOLIO_USER_TYPE_FIELD}`
+  return [
+    {
+      $lookup: {
+        from: USERS_COLLECTION,
+        localField: STOCKFOLIO_USER_REF_FIELD,
+        foreignField: '_id',
+        as: 'owner',
+      },
+    },
+    { $unwind: '$owner' },
+    {
+      $match: {
+        [userTypePath]: { $exists: true, $ne: REGULAR_USER_TYPE },
+      },
+    },
+  ]
+}
 
 async function refreshWatchlist() {
   const now = new Date()
@@ -22,6 +47,7 @@ async function refreshWatchlist() {
 
     const held = await positions
       .aggregate([
+        ...nonRegularUserStages(),
         { $group: { _id: { $toUpper: `$${field}` }, holders: { $sum: 1 } } },
       ])
       .toArray()
@@ -52,11 +78,12 @@ async function refreshWatchlist() {
   //    (tracked-but-not-held tickers; same Atlas cluster/DB as positions)
   try {
     const dbName = process.env.STOCKFOLIO_DB_NAME || 'stockfolio'
-    const field = process.env.POSITIONS_TICKER_FIELD || 'ticker'
+    const field = process.env.WATCHLISTS_TICKER_FIELD || process.env.POSITIONS_TICKER_FIELD || 'ticker'
     const watchlists = mongoose.connection.useDb(dbName, { useCache: true }).collection(WATCHLISTS_COLLECTION)
 
     const watched = await watchlists
       .aggregate([
+        ...nonRegularUserStages(),
         { $group: { _id: { $toUpper: `$${field}` }, watchers: { $sum: 1 } } },
       ])
       .toArray()
@@ -88,35 +115,52 @@ async function refreshWatchlist() {
         )
       }
     }
+
+    const watchedSet = watched.map((w) => w._id).filter(Boolean)
+    await WatchedTicker.updateMany(
+      { tier: 'watchlist', ticker: { $nin: watchedSet } },
+      { $set: { watchersCount: 0, tier: 'discovery' } }
+    )
   } catch (e) {
     console.warn('[watchlist] watchlists sync skipped:', e.message)
   }
 
   // 4) manual tier — env pins survive everything
   for (const t of (process.env.WATCHLIST || '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)) {
+    const existing = await WatchedTicker.findOne({ ticker: t }).select('tier').lean()
+    const tierPatch = existing?.tier === 'portfolio' ? {} : { tier: 'manual' }
     await WatchedTicker.updateOne(
       { ticker: t },
-      { $set: { active: true, lastActiveAt: now }, $setOnInsert: { tier: 'manual' } },
+      { $set: { ...tierPatch, active: true, lastActiveAt: now } },
       { upsert: true }
     )
   }
 
-  // 5) discovery promotion — analyzer-found tickers with sustained coverage
-  const since = new Date(Date.now() - 7 * 86_400_000)
-  const mentioned = await Article.aggregate([
-    { $match: { analyzed: true, publishedAt: { $gte: since } } },
-    { $unwind: '$tickers' },
-    { $group: { _id: '$tickers', n: { $sum: 1 } } },
-    { $match: { n: { $gte: DISCOVERY_MIN_MENTIONS } } },
-  ])
-  for (const m of mentioned) {
-    await WatchedTicker.updateOne(
-      { ticker: m._id },
-      {
-        $set: { mentions7d: m.n, lastActiveAt: now, active: true },
-        $setOnInsert: { tier: 'discovery' },
-      },
-      { upsert: true }
+  // 5) discovery promotion — optional analyzer-found tickers with sustained coverage.
+  // Disabled by default so workers only collect user-owned non-regular tickers
+  // plus explicit env-pinned manual symbols.
+  if (DISCOVERY_ENABLED) {
+    const since = new Date(Date.now() - 7 * 86_400_000)
+    const mentioned = await Article.aggregate([
+      { $match: { analyzed: true, publishedAt: { $gte: since } } },
+      { $unwind: '$tickers' },
+      { $group: { _id: '$tickers', n: { $sum: 1 } } },
+      { $match: { n: { $gte: DISCOVERY_MIN_MENTIONS } } },
+    ])
+    for (const m of mentioned) {
+      await WatchedTicker.updateOne(
+        { ticker: m._id },
+        {
+          $set: { mentions7d: m.n, lastActiveAt: now, active: true },
+          $setOnInsert: { tier: 'discovery' },
+        },
+        { upsert: true }
+      )
+    }
+  } else {
+    await WatchedTicker.updateMany(
+      { active: true, tier: 'discovery' },
+      { $set: { active: false, deactivatedAt: now } }
     )
   }
 

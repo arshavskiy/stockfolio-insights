@@ -112,9 +112,10 @@ Badge example this enables: **"Earnings in 6d · AMC · beat 7/8 · +3 analyst u
 ## Dynamic Watchlist + Quote Store (v0.5)
 
 **Watchlist is now DB-driven** (`WatchedTicker`), refreshed automatically:
-1. **portfolio tier** — distinct tickers from the Stockfolio `positions` collection (same Atlas cluster; configurable via `STOCKFOLIO_DB_NAME` / `POSITIONS_COLLECTION` / `POSITIONS_TICKER_FIELD`). Adding a position = subscribing.
-2. **manual tier** — env `WATCHLIST` pins survive everything.
-3. **discovery tier** — tickers the news analyzer surfaces ≥5 times/7d get promoted; quiet unheld tickers decay after 30d; hard cap `WATCHLIST_MAX=150` protects API budget (portfolio > manual > discovery priority).
+1. **portfolio tier** — distinct tickers from the Stockfolio `positions` collection, but only for owners whose `users.userType` is not `regular`. Same Atlas cluster; configurable via `STOCKFOLIO_DB_NAME`, `USERS_COLLECTION`, `POSITIONS_COLLECTION`, and ticker/user field env vars. Adding a position from a non-regular account = subscribing.
+2. **watchlist tier** — distinct tracked tickers from Stockfolio `watchlists`, also only for non-regular owners.
+3. **manual tier** — env `WATCHLIST` pins survive everything for dev/ops coverage.
+4. **discovery tier** — opt-in with `WATCHLIST_DISCOVERY_ENABLED=true`; tickers the news analyzer surfaces ≥5 times/7d get promoted. Disabled by default so workers collect user-owned non-regular tickers plus explicit manual pins only. Quiet unheld tickers decay after 30d; hard cap `WATCHLIST_MAX=150` protects API budget (portfolio > manual > watchlist > discovery priority).
 
 All three workers (`ingest`, `calendar`, `quotes`) iterate `getActiveTickers()`.
 

@@ -44,8 +44,8 @@ worker:calendar daily    events/fundamentals  CorporateEvent, Analyst-    via Mo
 worker:quotes   */5min   Yahoo v8 quotes      TickerQuote
                                               WatchedTicker
 ```
-- All workers start with `refreshWatchlist()` then loop `getActiveTickers()` (src/services/watchlist.ts)
-- Watchlist tiers: **portfolio** (synced from Stockfolio `positions` collection) > **manual** (env) > **watchlist** (synced from Stockfolio `watchlists` collection, tracked-not-held) > **discovery** (news-mentioned ≥5x/7d); 30d decay applies to discovery only; cap 150 (API budget)
+- All workers start with `refreshWatchlist()` then loop `getActiveTickers()` (src/services/watchlist.js)
+- Watchlist tiers: **portfolio** (synced from Stockfolio `positions` collection for owners whose `users.userType !== 'regular'`) > **manual** (env) > **watchlist** (synced from Stockfolio `watchlists` collection for non-regular owners, tracked-not-held) > **discovery** (news-mentioned ≥5x/7d, opt-in with `WATCHLIST_DISCOVERY_ENABLED=true`); 30d decay applies to discovery only; cap 150 (API budget)
 - `npm run worker:all` (via `concurrently`, added 2026-07-22) runs all three workers together in one terminal, color-coded/prefixed output, single Ctrl+C stops all three. This is the standard way to run this repo day-to-day
 
 ## Data sources & WHY (decisions made — don't relitigate)
