@@ -20,6 +20,7 @@ async function analyzePendingArticles() {
     index: i,
     headline: a.headline,
     summary: a.summary || '',
+    tickerHints: a.tickers || [],
   }))
 
   const prompt = `You are a financial news tagger. For each article below, return ONLY a JSON object of the form {"results": [...]} (no prose, no markdown fences). Each element of "results":
@@ -27,6 +28,7 @@ async function analyzePendingArticles() {
 
 Rules:
 - tickers: US/TASE symbols explicitly relevant; empty array if none.
+- tickerHints: provider/scraper hints, especially for Hebrew/TASE articles. Use them when the headline/summary is actually about that company; drop them when irrelevant.
 - industries: lowercase, from broad sectors (semiconductors, banking, energy, defense, healthcare, real-estate, software, retail, automotive, telecom, other).
 - sentiment: market-relevant tone for the tagged tickers, -1 bearish to 1 bullish, 0 neutral.
 - This is descriptive tagging, not investment advice.

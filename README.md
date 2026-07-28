@@ -123,6 +123,8 @@ individual ticker loops:
 
 - Globes Hebrew RSS feeds for all news and capital-market news.
 - Bizportal HTML list pages, including the analyst-recommendations tag page and capital-market news.
+- Hebrew company-name aliases seed likely `.TA` ticker hints before LLM analysis
+  (for example `אל על` -> `ELAL.TA`, `פועלים` -> `POLI.TA`).
 
 Configure with `ISRAELI_NEWS_ENABLED=false` to disable, or override the source list with
 `ISRAELI_NEWS_SOURCES` JSON. The one-shot command is:

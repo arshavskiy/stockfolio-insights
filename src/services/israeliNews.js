@@ -29,6 +29,36 @@ const DEFAULT_SOURCES = [
   },
 ]
 
+const TASE_ALIASES = [
+  ['POLI.TA', ['פועלים', 'בנק הפועלים', 'הפועלים']],
+  ['LUMI.TA', ['לאומי', 'בנק לאומי']],
+  ['MZTF.TA', ['מזרחי טפחות', 'מזרחי', 'טפחות']],
+  ['DSCT.TA', ['דיסקונט', 'בנק דיסקונט']],
+  ['FIBI.TA', ['הבינלאומי', 'בינלאומי', 'הבנק הבינלאומי']],
+  ['JBNK.TA', ['בנק ירושלים', 'jerusalem bank', 'bank jerusalem']],
+  ['ELAL.TA', ['אל על', 'אל-על', 'el al']],
+  ['TEVA.TA', ['טבע', 'teva']],
+  ['ICL.TA', ['איי.סי.אל', 'איי סי אל', 'כיל', 'icl']],
+  ['NICE.TA', ['נייס', 'nice']],
+  ['CHKP.TA', ['צ\'ק פוינט', 'צק פוינט', 'check point', 'checkpoint']],
+  ['BEZQ.TA', ['בזק']],
+  ['CEL.TA', ['סלקום']],
+  ['PTNR.TA', ['פרטנר']],
+  ['ENLT.TA', ['אנלייט', 'enlight']],
+  ['DLEKG.TA', ['דלק קבוצה', 'קבוצת דלק']],
+  ['NVMI.TA', ['נובה', 'nova']],
+  ['TSEM.TA', ['טאואר', 'tower']],
+  ['AZRG.TA', ['עזריאלי', 'קבוצת עזריאלי']],
+  ['GCT.TA', ['ג׳י סיטי', 'ג\'י סיטי', 'גי סיטי', 'g city', 'g-city']],
+  ['MLSR.TA', ['מליסרון']],
+  ['AMOT.TA', ['אמות']],
+  ['BIG.TA', ['ביג מרכזי קניות', 'ביג']],
+  ['SPEN.TA', ['שפיר', 'שפיר הנדסה', 'shapir']],
+  ['CISY.TA', ['סיאי', 'סי איי', 'c i systems', 'ci systems']],
+  ['OPCE.TA', ['או.פי.סי', 'או פי סי', 'opc']],
+  ['ORA.TA', ['אורמת', 'ormat']],
+]
+
 function configuredSources() {
   if (!process.env.ISRAELI_NEWS_SOURCES) return DEFAULT_SOURCES
   try {
@@ -60,6 +90,25 @@ function stripHtml(value = '') {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function normalizeText(value = '') {
+  return stripHtml(value)
+    .toLowerCase()
+    .replace(/[״"׳']/g, '')
+    .replace(/[-־]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractIsraeliTickers(...parts) {
+  const text = normalizeText(parts.filter(Boolean).join(' '))
+  if (!text) return []
+  const found = []
+  for (const [ticker, aliases] of TASE_ALIASES) {
+    if (aliases.some((alias) => text.includes(normalizeText(alias)))) found.push(ticker)
+  }
+  return [...new Set(found)]
 }
 
 function tagValue(xml, tag) {
@@ -105,6 +154,7 @@ function parseRss(xml, source) {
       headline: stripHtml(tagValue(item, 'title')),
       summary: stripHtml(tagValue(item, 'description')).slice(0, 2000),
       publishedAt: Number.isNaN(publishedAt.getTime()) ? new Date() : publishedAt,
+      tickers: extractIsraeliTickers(tagValue(item, 'title'), tagValue(item, 'description')),
     }
   }).filter((a) => a.url && a.headline)
 }
@@ -123,6 +173,7 @@ function parseBizportalList(html, source) {
       headline,
       summary: '',
       publishedAt: new Date(),
+      tickers: extractIsraeliTickers(headline),
     })
   }
 
@@ -138,6 +189,12 @@ async function upsertArticles(articles) {
         { $setOnInsert: article },
         { upsert: true }
       ).then((r) => { if (r.upsertedCount) inserted++ })
+      if (article.tickers?.length) {
+        await Article.updateOne(
+          { source: article.source, sourceId: article.sourceId, analyzed: { $ne: true } },
+          { $addToSet: { tickers: { $each: article.tickers } } }
+        )
+      }
     } catch (e) {
       if (e?.code !== 11000) console.error('[israeli-news] upsert error', e?.message)
     }
@@ -171,6 +228,7 @@ async function fetchIsraeliBusinessNews() {
 
 module.exports = {
   fetchIsraeliBusinessNews,
+  extractIsraeliTickers,
   parseRss,
   parseBizportalList,
 }
