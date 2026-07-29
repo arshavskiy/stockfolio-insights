@@ -64,6 +64,31 @@ The scraper stores `source`, `sourceUrl`, analyst count, and 12-month target-pri
 market-data enrichment, not a regulatory source. Investing may serve a Cloudflare challenge to
 script clients; in that case the pipeline skips the ticker rather than failing the worker.
 
+`workers/taseCalendar.js` runs these same steps (minus SEC/XBRL, which are US-only and would
+just fail for `.TA` symbols) filtered to `.TA` tickers, on its own daily schedule
+(`TASE_CALENDAR_CRON`, default `0 7 * * *` — after the main calendar run).
+
+## LLM Article Analysis
+
+`services/analyzer.js` (`analyzePendingArticles()`) batches up to 20 unanalyzed `Article` rows
+and sends **only** this per article to the model (`ANALYZER_MODEL`, default `gpt-4o-mini`):
+
+- `headline` — the article title, as scraped
+- `summary` — the source's own short description/dek if the scraper captured one, else empty
+  string (RSS feeds usually have this; the Bizportal HTML-list scraper does not — title only)
+- `tickerHints` — ticker(s) already guessed by the scraper (Finnhub's company-news ticker, or
+  a `TASE_ALIASES` Hebrew name match from `israeliNews.js`) — the model can confirm or drop these,
+  not raw article text
+
+**Not sent**: the article URL, source name, publish date, or full article body — nothing here
+fetches or stores full article text, only headline + short summary.
+
+The model returns per article: confirmed `tickers`, `industries`, `sentiment` (-1..1),
+`themes`, and a one-line `llmSummary` (a *new* English summary the model writes from the
+headline/summary it was given — not a copy of the original). These are the fields
+`aggregate.js` rolls up into daily `TickerInsight` rows (`articleCount`, `avgSentiment`,
+`momentum`, `topThemes`).
+
 ## Position Page Enrichment
 
 `GET /enrich/:ticker` — single composed payload for the Stockfolio Position page (5-min in-memory cache, `x-cache` header):

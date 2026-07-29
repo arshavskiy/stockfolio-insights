@@ -47,6 +47,20 @@ async function rebuildDailyAggregates(daysBack = 8) {
     )
   }
 
+  // Articles can lose a ticker tag after re-analysis (analyzer.js replaces
+  // tags authoritatively each run), which can drop a (ticker, date) pair to
+  // zero current articles. The loop above only touches pairs that still have
+  // >=1 match, so a stale row from an earlier run would otherwise survive
+  // forever — remove any row in this window with no matching fresh data.
+  const freshKeys = new Set(rows.map((r) => `${r._id.ticker}|${r._id.date}`))
+  const existingInWindow = await TickerInsight.find({ date: { $gte: utcDate(since) } })
+    .select('ticker date')
+    .lean()
+  const staleIds = existingInWindow
+    .filter((row) => !freshKeys.has(`${row.ticker}|${row.date}`))
+    .map((row) => row._id)
+  if (staleIds.length) await TickerInsight.deleteMany({ _id: { $in: staleIds } })
+
   // momentum: today's avg minus trailing 7d avg
   const today = utcDate(new Date())
   const todayRows = await TickerInsight.find({ date: today })
