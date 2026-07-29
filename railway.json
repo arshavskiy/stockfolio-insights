@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "npx concurrently -n ingest,calendar,quotes -c blue,magenta,green \"node src/workers/ingest.js\" \"node src/workers/calendar.js\" \"node src/workers/quotes.js\"",
+    "startCommand": "npm run worker:all",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
