@@ -4,14 +4,14 @@
   "description": "News-driven market insights service for Stockfolio — ingestion, ticker/industry tagging, sentiment aggregation",
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/index.js",
-    "start": "node --env-file-if-exists=.env src/index.js",
-    "worker": "node --env-file-if-exists=.env src/workers/ingest.js",
-    "worker:israeli-news": "node --env-file-if-exists=.env src/workers/israeliNews.js",
-    "worker:calendar": "node --env-file-if-exists=.env src/workers/calendar.js",
-    "worker:tase-calendar": "node --env-file-if-exists=.env src/workers/taseCalendar.js",
-    "worker:quotes": "node --env-file-if-exists=.env src/workers/quotes.js",
-    "backfill:ta-analyst": "node --env-file-if-exists=.env scripts/backfill-ta-analyst-consensus.js",
-    "backfill:israeli-news": "node --env-file-if-exists=.env scripts/fetch-israeli-news.js",
+    "start": "node src/index.js",
+    "worker": "node src/workers/ingest.js",
+    "worker:israeli-news": "node src/workers/israeliNews.js",
+    "worker:calendar": "node src/workers/calendar.js",
+    "worker:tase-calendar": "node src/workers/taseCalendar.js",
+    "worker:quotes": "node src/workers/quotes.js",
+    "backfill:ta-analyst": "node scripts/backfill-ta-analyst-consensus.js",
+    "backfill:israeli-news": "node scripts/fetch-israeli-news.js",
     "worker:all": "concurrently -n ingest,calendar,tase-calendar,quotes,israeli-news -c blue,magenta,cyan,green,yellow \"npm:worker\" \"npm:worker:calendar\" \"npm:worker:tase-calendar\" \"npm:worker:quotes\" \"npm:worker:israeli-news\""
   },
   "dependencies": {
